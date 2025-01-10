@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Travelking</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <!-- Header -->
+  <header class="bg-blue-600 text-white p-4">
+    <h1 class="text-xl font-bold text-center">Travelking availability Checker</h1>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container mx-auto my-8 p-4 bg-white shadow rounded">
+
+    <div class="">
+        <h1>Allegria Resort</h1>
+    </div>
+    
+    <button id="openCalendar" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+      Check Availability
+    </button>
+
+    <div id="calendarPopup" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+      <div class="bg-white rounded p-6 shadow-lg w-4/5 max-w-lg">
+        <h2 class="text-lg font-semibold mb-4">Select Your Dates</h2>
+        <div id="calendar" class="mb-4"></div>
+        <button id="submitDates" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          Show Available Rooms
+        </button>
+        <button id="closePopup" class="px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500 mt-2">
+          Cancel
+        </button>
+      </div>
+    </div>
+
+    <div id="roomsContainer" class="mt-6 hidden">
+      <h2 class="text-xl font-semibold mb-4">Available Rooms</h2>
+      <div id="roomsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script>
+    const calendarPopup = document.getElementById("calendarPopup");
+    const calendarElement = document.getElementById("calendar");
+    const openCalendarButton = document.getElementById("openCalendar");
+    const submitDatesButton = document.getElementById("submitDates");
+    const closePopupButton = document.getElementById("closePopup");
+    const roomsContainer = document.getElementById("roomsContainer");
+    const roomsList = document.getElementById("roomsList");
+
+    let selectedDateRange = null;
+
+    // Fetch availability data
+    async function fetchAvailability() {
+      const url = "https://api.travelcircus.net/hotels/17080/checkins?E&party=%7B%22adults%22:2,%22children%22:%5B%5D%7D&domain=de&date_start=2025-01-01&date_end=2025-06-31";
+      const response = await fetch(url);
+      const data = await response.json();
+      return data._embedded.hotel_availabilities;
+    }
+
+    // Initialize Flatpickr with fetched data
+    async function initializeCalendar() {
+      const availability = await fetchAvailability();
+
+      const datesWithInfo = availability.map(({ date, price, price_position }) => ({
+        date,
+        info: `€${price}`,
+        color:
+          price_position === "low" ? "#d1fae5" :
+          price_position === "medium" ? "#fbd7b9" :
+          "#fbd7b9",
+      }));
+
+      flatpickr(calendarElement, {
+        mode: "range",
+        inline: true,
+        enable: datesWithInfo.map((d) => d.date),
+        onDayCreate: function (dObj, dStr, fp, dayElem) {
+          const dateInfo = datesWithInfo.find((d) => d.date === dayElem.dateObj.toISOString().split("T")[0]);
+          if (dateInfo) {
+            dayElem.style.backgroundColor = dateInfo.color;
+          dayElem.style.display = "flex";
+          dayElem.style.flexDirection = "column";
+          dayElem.style.alignItems = "center";
+          dayElem.style.lineHeight = "12px";
+            const priceLabel = document.createElement("p");
+            priceLabel.innerHTML = `${dateInfo.info}`;
+            priceLabel.style.fontSize = "0.6rem";
+            priceLabel.style.display = "block"; 
+            dayElem.appendChild(priceLabel);
+          }
+        },
+        onChange: function (selectedDates) {
+          selectedDateRange = selectedDates.map((d) => d.toISOString().split("T")[0]);
+        },
+      });
+    }
+
+    // Show calendar popup
+    openCalendarButton.addEventListener("click", async () => {
+      calendarPopup.classList.remove("hidden");
+      await initializeCalendar();
+    });
+
+    // Hide calendar popup
+    closePopupButton.addEventListener("click", () => {
+      calendarPopup.classList.add("hidden");
+    });
+
+    // Submit selected dates
+    submitDatesButton.addEventListener("click", async () => {
+      if (!selectedDateRange || selectedDateRange.length < 2) {
+        alert("Please select a valid date range.");
+        return;
+      }
+
+      const [checkin, checkout] = selectedDateRange;
+      const url = `https://api.travelcircus.net/hotels/17080/quotes?locale=de_DE&checkin=${checkin}&checkout=${checkout}&party=%7B%22adults%22:2,%22children%22:%5B%5D%7D&domain=de`;
+
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        console.log(data);
+        displayRooms(data);
+      } catch (error) {
+        console.error("Error fetching room data:", error);
+        alert("Failed to fetch room data. Please try again.");
+      }
+
+      calendarPopup.classList.add("hidden");
+    });
+
+    // Display available rooms
+    function displayRooms(data) {
+      roomsContainer.classList.remove("hidden");
+      roomsList.innerHTML = "";
+
+      console.log(data);
+      data._embedded.hotel_quotes.forEach((room) => {
+        console.log(room);
+        const roomElement = document.createElement("div");
+        roomElement.className = "bg-gray-100 p-4 rounded shadow";
+        roomElement.innerHTML = `
+          <h3 class="text-lg font-bold">${room.name}</h3>
+          <p class="text-sm">Price: €${room.full_formatted_price}</p>
+          <p class="text-sm">Max Guests: ${room.max_capacity}</p>
+        `;
+        roomsList.appendChild(roomElement);
+      });
+    }
+  </script>
+</body>
+</html>
